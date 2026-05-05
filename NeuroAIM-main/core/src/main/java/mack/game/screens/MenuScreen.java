@@ -6,8 +6,11 @@ import com.badlogic.gdx.Input;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
+import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.utils.viewport.FitViewport;
+import com.badlogic.gdx.utils.viewport.Viewport;
 
 public class MenuScreen implements Screen {
 
@@ -15,39 +18,39 @@ public class MenuScreen implements Screen {
     private SpriteBatch batch;
     private BitmapFont font;
 
-    // Dificuldade persistida entre telas (padrão: 1 = Inicial)
+    private OrthographicCamera camera;
+    private Viewport viewport;
+    private static final float V_WIDTH  = 800f;
+    private static final float V_HEIGHT = 480f;
+
     private static int dificuldade = 1;
 
-    private String[] opcoes = {
-            "JOGAR",
-            "CONFIGURAÇÕES",
-            "TUTORIAL",
-            "SAIR"
-    };
-
+    private String[] opcoes = { "JOGAR", "CONFIGURAÇÕES", "TUTORIAL", "SAIR" };
     private int opcaoSelecionada = 0;
 
     public MenuScreen(Game game) {
         this.game = game;
     }
 
-    /** Permite que ConfigScreen atualize a dificuldade globalmente. */
-    public static void setDificuldade(int d) {
-        dificuldade = d;
-    }
-
-    public static int getDificuldade() {
-        return dificuldade;
-    }
+    public static void setDificuldade(int d) { dificuldade = d; }
+    public static int  getDificuldade()      { return dificuldade; }
 
     @Override
     public void show() {
+        camera   = new OrthographicCamera();
+        viewport = new FitViewport(V_WIDTH, V_HEIGHT, camera);
+        viewport.apply();
+        camera.position.set(V_WIDTH / 2f, V_HEIGHT / 2f, 0);
+
         batch = new SpriteBatch();
         font  = new BitmapFont();
     }
 
     @Override
     public void render(float delta) {
+        camera.update();
+        batch.setProjectionMatrix(camera.combined);
+
         verificarEntrada();
 
         Gdx.gl.glClearColor(0.95f, 0.93f, 1f, 1);
@@ -64,7 +67,6 @@ public class MenuScreen implements Screen {
         font.draw(batch, "Treine sua mente. Aprimore seu foco.", 165, 385);
 
         font.getData().setScale(2f);
-
         for (int i = 0; i < opcoes.length; i++) {
             if (i == opcaoSelecionada) {
                 font.setColor(Color.PURPLE);
@@ -82,43 +84,32 @@ public class MenuScreen implements Screen {
         batch.end();
     }
 
+    @Override
+    public void resize(int width, int height) {
+        viewport.update(width, height);
+    }
+
     private void verificarEntrada() {
-        if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN) ||
-            Gdx.input.isKeyJustPressed(Input.Keys.S)) {
+        if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN) || Gdx.input.isKeyJustPressed(Input.Keys.S))
             opcaoSelecionada = (opcaoSelecionada + 1) % opcoes.length;
-        }
-
-        if (Gdx.input.isKeyJustPressed(Input.Keys.UP) ||
-            Gdx.input.isKeyJustPressed(Input.Keys.W)) {
+        if (Gdx.input.isKeyJustPressed(Input.Keys.UP)   || Gdx.input.isKeyJustPressed(Input.Keys.W))
             opcaoSelecionada = (opcaoSelecionada - 1 + opcoes.length) % opcoes.length;
-        }
-
-        if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
+        if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER))
             selecionarOpcao();
-        }
     }
 
     private void selecionarOpcao() {
         switch (opcaoSelecionada) {
-            case 0:
-                game.setScreen(new GameScreen(game, dificuldade));
-                break;
-            case 1:
-                game.setScreen(new ConfigScreen(game));
-                break;
-            case 2:
-                game.setScreen(new TutorialScreen(game));
-                break;
-            case 3:
-                Gdx.app.exit();
-                break;
+            case 0: game.setScreen(new GameScreen(game, dificuldade)); break;
+            case 1: game.setScreen(new ConfigScreen(game));            break;
+            case 2: game.setScreen(new TutorialScreen(game));          break;
+            case 3: Gdx.app.exit();                                    break;
         }
     }
 
-    @Override public void resize(int width, int height) {}
-    @Override public void pause() {}
+    @Override public void pause()  {}
     @Override public void resume() {}
-    @Override public void hide() {}
+    @Override public void hide()   {}
 
     @Override
     public void dispose() {
