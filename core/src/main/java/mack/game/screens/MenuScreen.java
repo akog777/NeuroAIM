@@ -11,12 +11,15 @@ import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
+import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.utils.viewport.StretchViewport;
 
 public class MenuScreen implements Screen {
 
     private Game game;
     private SpriteBatch batch;
     private BitmapFont font;
+    private Texture background;
 
     private OrthographicCamera camera;
     private Viewport viewport;
@@ -38,12 +41,13 @@ public class MenuScreen implements Screen {
     @Override
     public void show() {
         camera   = new OrthographicCamera();
-        viewport = new FitViewport(V_WIDTH, V_HEIGHT, camera);
+        viewport = new StretchViewport(V_WIDTH, V_HEIGHT, camera);
         viewport.apply();
         camera.position.set(V_WIDTH / 2f, V_HEIGHT / 2f, 0);
 
         batch = new SpriteBatch();
         font  = new BitmapFont();
+        background = new Texture(Gdx.files.internal("menu.jpeg")); 
     }
 
     @Override
@@ -58,28 +62,26 @@ public class MenuScreen implements Screen {
 
         batch.begin();
 
-        font.setColor(new Color(0.25f, 0.10f, 0.50f, 1));
-        font.getData().setScale(3f);
-        font.draw(batch, "NEUROAIM", 230, 430);
-
-        font.setColor(Color.DARK_GRAY);
-        font.getData().setScale(1.3f);
-        font.draw(batch, "Treine sua mente. Aprimore seu foco.", 165, 385);
+        // Desenha o background
+        batch.draw(background, 0, 0, V_WIDTH, V_HEIGHT);
 
         font.getData().setScale(2f);
         for (int i = 0; i < opcoes.length; i++) {
             if (i == opcaoSelecionada) {
-                font.setColor(Color.PURPLE);
-                font.draw(batch, "> " + opcoes[i], 250, 300 - i * 55);
+                font.setColor(Color.YELLOW); // Amarelo para destacar a opção selecionada
+                // O valor '50' alinha a seta à esquerda
+                font.draw(batch, "> " + opcoes[i], 50, 300 - i * 55); 
             } else {
-                font.setColor(Color.DARK_GRAY);
-                font.draw(batch, opcoes[i], 285, 300 - i * 55);
+                font.setColor(Color.WHITE); // Branco para as outras opções para destacar do fundo
+                // O valor '85' alinha o texto à esquerda, alinhado com o texto da seta
+                font.draw(batch, opcoes[i], 85, 300 - i * 55); 
             }
         }
 
-        font.setColor(Color.GRAY);
+        // Texto de instruções lá embaixo, agora em branco para ficar legível
+        font.setColor(Color.WHITE);
         font.getData().setScale(1f);
-        font.draw(batch, "Use W/S ou Setas para navegar | ENTER para selecionar", 115, 60);
+        font.draw(batch, "Use W/S ou Setas para navegar | ENTER para selecionar", 50, 60);
 
         batch.end();
     }
@@ -115,5 +117,6 @@ public class MenuScreen implements Screen {
     public void dispose() {
         batch.dispose();
         font.dispose();
+        background.dispose();
     }
 }

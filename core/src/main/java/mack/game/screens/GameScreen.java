@@ -14,6 +14,8 @@ import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
+import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.utils.viewport.StretchViewport;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -25,6 +27,7 @@ public class GameScreen implements Screen {
     private SpriteBatch batch;
     private ShapeRenderer shape;
     private BitmapFont font;
+    private Texture background;
 
     private OrthographicCamera camera;
     private Viewport viewport;
@@ -39,7 +42,8 @@ public class GameScreen implements Screen {
     private float miraX;
     private float miraY;
     private static final float VELOCIDADE_MIRA = 220f;
-    private static final float RAIO_MIRA       = 14f;
+    private static final float RAIO_MIRA       = 8f; 
+    private static final float MARGEM_TOPO     = 60f;
 
     private float mouseXAnterior = -1;
     private float mouseYAnterior = -1;
@@ -105,7 +109,7 @@ public class GameScreen implements Screen {
     @Override
     public void show() {
         camera   = new OrthographicCamera();
-        viewport = new FitViewport(LARGURA, ALTURA, camera);
+        viewport = new StretchViewport(LARGURA, ALTURA, camera);
         viewport.apply();
         camera.position.set(LARGURA / 2f, ALTURA / 2f, 0);
 
@@ -115,6 +119,10 @@ public class GameScreen implements Screen {
 
         miraX = LARGURA / 2f;
         miraY = MARGEM_HUD + (ALTURA - MARGEM_HUD) / 2f;
+
+            
+        String bgPath = "fase" + dificuldade + ".jpeg";
+        background = new Texture(Gdx.files.internal(bgPath));
 
         Gdx.input.setCursorCatched(true);
         ajustarDificuldade();
@@ -138,6 +146,10 @@ public class GameScreen implements Screen {
         shape.setProjectionMatrix(camera.combined);
 
         limparTela();
+
+        batch.begin();
+        batch.draw(background, 0, 0, LARGURA, ALTURA);
+        batch.end();
 
         if (estado == Estado.JOGANDO) {
             atualizar(delta);
@@ -213,7 +225,7 @@ public class GameScreen implements Screen {
             float limEsq   = a.raio;
             float limDir   = LARGURA - a.raio;
             float limBaixo = MARGEM_HUD + a.raio;
-            float limCima  = ALTURA - a.raio;
+            float limCima  = ALTURA - MARGEM_TOPO - a.raio;
             if (a.x < limEsq   || a.x > limDir)   a.velX *= -1;
             if (a.y < limBaixo || a.y > limCima)   a.velY *= -1;
             a.x = MathUtils.clamp(a.x, limEsq,   limDir);
@@ -276,7 +288,7 @@ public class GameScreen implements Screen {
         float raio   = getRaioAlvo();
         float margem = raio + 10f;
         float x      = MathUtils.random(margem, LARGURA - margem);
-        float y      = MathUtils.random(MARGEM_HUD + margem, ALTURA - margem);
+        float y      = MathUtils.random(MARGEM_HUD + margem, ALTURA - MARGEM_TOPO - margem);
         float vida   = getVidaAlvo();
 
         float velX = 0, velY = 0;
@@ -357,8 +369,6 @@ public class GameScreen implements Screen {
 
         desenharCard(10, ALTURA - MARGEM_HUD + 8f, 130f, 44f,
                 new Color(0.18f, 0.09f, 0.38f, 1f), new Color(0.55f, 0.20f, 0.90f, 1f));
-        desenharCard(LARGURA / 2f - 75f, ALTURA - MARGEM_HUD + 8f, 150f, 44f,
-                new Color(0.18f, 0.09f, 0.38f, 1f), new Color(0.55f, 0.20f, 0.90f, 1f));
         desenharCard(LARGURA - 265f, ALTURA - MARGEM_HUD + 8f, 120f, 44f,
                 new Color(0.05f, 0.20f, 0.12f, 1f), new Color(0.15f, 0.75f, 0.40f, 1f));
         desenharCard(LARGURA - 135f, ALTURA - MARGEM_HUD + 8f, 80f, 44f,
@@ -405,16 +415,8 @@ public class GameScreen implements Screen {
 
         shape.begin(ShapeRenderer.ShapeType.Line);
 
-        shape.setColor(new Color(0.55f, 0.20f, 0.90f, 0.06f));
-        float passo = 40f;
-        for (float gx = 0; gx < LARGURA; gx += passo)
-            shape.line(gx, MARGEM_HUD, gx, ALTURA - MARGEM_HUD);
-        for (float gy = MARGEM_HUD; gy < ALTURA - MARGEM_HUD; gy += passo)
-            shape.line(0, gy, LARGURA, gy);
-
         shape.setColor(new Color(0.55f, 0.20f, 0.90f, 0.4f));
         shape.rect(10, ALTURA - MARGEM_HUD + 8f, 130f, 44f);
-        shape.rect(LARGURA / 2f - 75f, ALTURA - MARGEM_HUD + 8f, 150f, 44f);
         shape.setColor(new Color(0.15f, 0.75f, 0.40f, 0.5f));
         shape.rect(LARGURA - 265f, ALTURA - MARGEM_HUD + 8f, 120f, 44f);
         shape.setColor(new Color(0.85f, 0.20f, 0.20f, 0.5f));
@@ -473,13 +475,6 @@ public class GameScreen implements Screen {
         font.getData().setScale(1.8f);
         font.setColor(urgenciaTimer ? new Color(1f, 0.25f, 0.25f, 1f) : Color.WHITE);
         font.draw(batch, String.format("%02d:%02d", seg / 60, seg % 60), 20, ALTURA - MARGEM_HUD + 32f);
-
-        font.getData().setScale(1.3f);
-        font.setColor(new Color(0.85f, 0.70f, 1.00f, 1f));
-        font.draw(batch, "SCORE", LARGURA / 2f - 65f, ALTURA - MARGEM_HUD + 48f);
-        font.getData().setScale(1.8f);
-        font.setColor(Color.WHITE);
-        font.draw(batch, String.valueOf((int) scoreTotal), LARGURA / 2f - 65f, ALTURA - MARGEM_HUD + 32f);
 
         font.getData().setScale(1.1f);
         font.setColor(new Color(0.50f, 1.00f, 0.65f, 1f));
@@ -607,5 +602,6 @@ public class GameScreen implements Screen {
         batch.dispose();
         shape.dispose();
         font.dispose();
+        if(background != null) background.dispose();
     }
 }
