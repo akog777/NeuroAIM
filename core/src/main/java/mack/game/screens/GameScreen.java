@@ -1,5 +1,9 @@
 package mack.game.screens;
 
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+
 import com.badlogic.gdx.Game;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
@@ -7,19 +11,14 @@ import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
-import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
+import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
-import com.badlogic.gdx.utils.viewport.FitViewport;
-import com.badlogic.gdx.utils.viewport.Viewport;
-import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.utils.viewport.StretchViewport;
-
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
+import com.badlogic.gdx.utils.viewport.Viewport;
 
 public class GameScreen implements Screen {
 
@@ -28,6 +27,8 @@ public class GameScreen implements Screen {
     private ShapeRenderer shape;
     private BitmapFont font;
     private Texture background;
+
+    private boolean botaoAnterior = false;
 
     private OrthographicCamera camera;
     private Viewport viewport;
@@ -41,6 +42,8 @@ public class GameScreen implements Screen {
 
     private float miraX;
     private float miraY;
+    private mack.game.JoystickInput joystick;
+    private Thread joystickThread;
     private static final float VELOCIDADE_MIRA = 220f;
     private static final float RAIO_MIRA       = 8f; 
     private static final float MARGEM_TOPO     = 60f;
@@ -126,6 +129,11 @@ public class GameScreen implements Screen {
 
         Gdx.input.setCursorCatched(true);
         ajustarDificuldade();
+        // Inicializa o Joystick na COM3 (mude se o seu PC usar outra porta)
+        joystick = new mack.game.JoystickInput("COM4");
+        joystickThread = new Thread(joystick);
+        joystickThread.setDaemon(true); // Garante que a thread morra com o jogo
+        joystickThread.start();
     }
 
     private void ajustarDificuldade() {
@@ -246,22 +254,31 @@ public class GameScreen implements Screen {
     }
 
     private void moverMira(float delta) {
-        // Converte mouse para coordenadas do mundo virtual (resolve tela cheia)
-        Vector2 mouse = viewport.unproject(new Vector2(Gdx.input.getX(), Gdx.input.getY()));
-
-        if (mouseXAnterior >= 0) {
-            float dx = mouse.x - mouseXAnterior;
-            float dy = mouse.y - mouseYAnterior;
-            if (Math.abs(dx) > 0.01f || Math.abs(dy) > 0.01f) {
-                miraX += dx;
-                miraY += dy;
-                movimentoAcumulado += Math.sqrt(dx * dx + dy * dy);
-            }
-        }
-        mouseXAnterior = mouse.x;
-        mouseYAnterior = mouse.y;
-
         float dx = 0, dy = 0;
+
+        if (joystick != null) {
+            
+            // --- EIXO X DO JOGO (ESQUERDA / DIREITA) ---
+            if (joystick.y < 1000) dx -= 1;      
+            else if (joystick.y > 3000) dx += 1; 
+
+            // --- EIXO Y DO JOGO (BAIXO / CIMA) ---
+            if (joystick.x < 1000) dy -= 1;      
+            else if (joystick.x > 3000) dy += 1; 
+
+            // --- LÓGICA DO BOTÃO (1 CLIQUE POR APERTO) ---
+            boolean botaoAtual = joystick.botaoPressionado;
+            
+            // Só dispara se estiver pressionado AGORA e NÃO ESTAVA no frame passado
+            if (botaoAtual && !botaoAnterior) {
+                disparar();
+            }
+            
+            // Guarda o estado atual para comparar no próximo frame
+            botaoAnterior = botaoAtual;
+        }
+
+        // Teclado (Mantido para testes)
         if (Gdx.input.isKeyPressed(Input.Keys.LEFT)  || Gdx.input.isKeyPressed(Input.Keys.A)) dx -= 1;
         if (Gdx.input.isKeyPressed(Input.Keys.RIGHT) || Gdx.input.isKeyPressed(Input.Keys.D)) dx += 1;
         if (Gdx.input.isKeyPressed(Input.Keys.UP)    || Gdx.input.isKeyPressed(Input.Keys.W)) dy += 1;
@@ -576,6 +593,7 @@ public class GameScreen implements Screen {
     @Override
     public void hide() {
         Gdx.input.setCursorCatched(false);
+        if (joystick != null) joystick.fechar();
     }
 
     private void desenharCard(float x, float y, float largura, float altura, Color corFundo, Color corAcento) {
@@ -602,6 +620,6 @@ public class GameScreen implements Screen {
         batch.dispose();
         shape.dispose();
         font.dispose();
-        if(background != null) background.dispose();
+        if (joystick != null) joystick.fechar();
     }
 }
