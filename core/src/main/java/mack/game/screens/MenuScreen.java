@@ -102,7 +102,8 @@ public class MenuScreen implements Screen {
 
     private void selecionarOpcao() {
         switch (opcaoSelecionada) {
-            case 0: game.setScreen(new GameScreen(game, dificuldade)); break;
+            // Agora chamamos a história no "Capítulo 0" (Introdução)
+            case 0: game.setScreen(new StoryScreen(game, 0));          break;
             case 1: game.setScreen(new ConfigScreen(game));            break;
             case 2: game.setScreen(new TutorialScreen(game));          break;
             case 3: Gdx.app.exit();                                    break;

@@ -8,6 +8,7 @@ import com.badlogic.gdx.Game;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.Screen;
+import com.badlogic.gdx.audio.Music;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
@@ -17,6 +18,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
+import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.viewport.StretchViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 
@@ -27,14 +29,19 @@ public class GameScreen implements Screen {
     private ShapeRenderer shape;
     private BitmapFont font;
     private Texture background;
+    private Music musicaFundo;
 
     private boolean botaoAnterior = false;
 
     private OrthographicCamera camera;
     private Viewport viewport;
 
-    private enum Estado { JOGANDO, GAME_OVER }
+    private enum Estado { JOGANDO, GAME_OVER, PAUSADO }
     private Estado estado = Estado.JOGANDO;
+
+    // --- VARIÁVEIS DO MENU DE PAUSA ---
+    private String[] opcoesPausa = { "CONTINUAR", "REINICIAR FASE", "VOLTAR AO MENU" };
+    private int opcaoPausaSelecionada = 0;
 
     private static final float LARGURA    = 800f;
     private static final float ALTURA     = 480f;
@@ -127,12 +134,19 @@ public class GameScreen implements Screen {
         String bgPath = "fase" + dificuldade + ".jpeg";
         background = new Texture(Gdx.files.internal(bgPath));
 
+        // --- CARREGAR MÚSICA DA FASE DINAMICAMENTE ---
+        String musicPath = "fase" + dificuldade + "m.mp3";
+        musicaFundo = Gdx.audio.newMusic(Gdx.files.internal(musicPath));
+        musicaFundo.setLooping(true); // Repete a música se ela acabar antes do tempo
+        musicaFundo.setVolume(0.3f);  // Volume entre 0.0f (mudo) e 1.0f (estourando)
+        musicaFundo.play();
+
         Gdx.input.setCursorCatched(true);
         ajustarDificuldade();
-        // Inicializa o Joystick na COM3 (mude se o seu PC usar outra porta)
+        
         joystick = new mack.game.JoystickInput("COM4");
         joystickThread = new Thread(joystick);
-        joystickThread.setDaemon(true); // Garante que a thread morra com o jogo
+        joystickThread.setDaemon(true);
         joystickThread.start();
     }
 
@@ -153,6 +167,18 @@ public class GameScreen implements Screen {
         batch.setProjectionMatrix(camera.combined);
         shape.setProjectionMatrix(camera.combined);
 
+        // --- SISTEMA DE PAUSA ---
+        if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+            if (estado == Estado.JOGANDO) {
+                estado = Estado.PAUSADO;
+                if (musicaFundo != null) musicaFundo.pause(); // Pausa a música
+            } else if (estado == Estado.PAUSADO) {
+                estado = Estado.JOGANDO;
+                if (musicaFundo != null) musicaFundo.play();  // Despausa a música
+                Gdx.input.setCursorCatched(true); // Prende o mouse de novo
+            }
+        }
+
         limparTela();
 
         batch.begin();
@@ -162,13 +188,38 @@ public class GameScreen implements Screen {
         if (estado == Estado.JOGANDO) {
             atualizar(delta);
             desenharJogo();
+        } else if (estado == Estado.PAUSADO) {
+            Gdx.input.setCursorCatched(false);
+            desenharJogo(); // Desenha o jogo congelado no fundo
+            atualizarPause();
+            desenharPause();
         } else {
             Gdx.input.setCursorCatched(false);
             desenharGameOver();
-            if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER))
-                game.setScreen(new GameScreen(game, dificuldade));
-            if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE))
+            
+            boolean apertouParaAvancar = Gdx.input.isKeyJustPressed(Input.Keys.ENTER) || 
+                                         (joystick != null && joystick.botaoPressionado);
+
+            if (apertouParaAvancar) {
+                if (joystick != null) joystick.botaoPressionado = false; // Reseta o clique
+
+                // --- LÓGICA DE META DE ACERTOS ---
+                boolean passou = false;
+                if (dificuldade == 1 && scoreReacao >= 75f) passou = true;
+                else if (dificuldade == 2 && scoreReacao >= 50f) passou = true;
+                else if (dificuldade == 3 && scoreReacao >= 30f) passou = true;
+
+                if (passou) {
+                    // Bateu a meta! Mostra a história e avança
+                    game.setScreen(new StoryScreen(game, dificuldade));
+                } else {
+                    // Falhou na meta. Repete a mesma fase
+                    game.setScreen(new GameScreen(game, dificuldade));
+                }
+            }
+            if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
                 game.setScreen(new MenuScreen(game));
+            }
         }
     }
 
@@ -294,11 +345,6 @@ public class GameScreen implements Screen {
 
         miraX = MathUtils.clamp(miraX, RAIO_MIRA, LARGURA - RAIO_MIRA);
         miraY = MathUtils.clamp(miraY, MARGEM_HUD + RAIO_MIRA, ALTURA - RAIO_MIRA);
-
-        if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
-            Gdx.input.setCursorCatched(false);
-            game.setScreen(new MenuScreen(game));
-        }
     }
 
     private void spawnAlvo() {
@@ -514,7 +560,7 @@ public class GameScreen implements Screen {
 
         font.getData().setScale(0.85f);
         font.setColor(new Color(0.45f, 0.45f, 0.60f, 1f));
-        font.draw(batch, "Mouse / W A S D  -  ESPACO ou CLIQUE para disparar  -  ESC: menu", 10, 14f);
+        font.draw(batch, "Controle Analogico  -  BOTAO para disparar  -  ESC: menu", 10, 14f);
 
         batch.end();
     }
@@ -547,15 +593,23 @@ public class GameScreen implements Screen {
 
         batch.begin();
 
+        // Verifica se o jogador bateu a meta para mudar os textos
+        boolean passou = false;
+        if (dificuldade == 1 && scoreReacao >= 75f) passou = true;
+        else if (dificuldade == 2 && scoreReacao >= 50f) passou = true;
+        else if (dificuldade == 3 && scoreReacao >= 30f) passou = true;
+
         font.getData().setScale(2.6f);
-        font.setColor(Color.WHITE);
-        font.draw(batch, "SESSAO CONCLUIDA", 105, ALTURA - 90f);
+        if (passou) {
+            font.setColor(new Color(0.20f, 0.85f, 0.45f, 1f)); // Verde
+            font.draw(batch, "FASE " + dificuldade + " CONCLUIDA!", 105, ALTURA - 90f);
+        } else {
+            font.setColor(new Color(0.90f, 0.25f, 0.25f, 1f)); // Vermelho
+            font.draw(batch, "TREINO FALHOU. TENTE NOVAMENTE.", 85, ALTURA - 90f);
+        }
 
-        font.getData().setScale(1.1f);
-        font.setColor(new Color(0.65f, 0.55f, 0.85f, 1f));
-        font.draw(batch, "Score = (P x 0.5)  +  (E x 0.3)  +  (T x 0.2)", 110, ALTURA - 145f);
-
-        float linhaY = ALTURA - 180f;
+        // Subimos um pouco os textos porque a fórmula foi removida
+        float linhaY = ALTURA - 150f; 
         font.getData().setScale(1.3f);
         font.setColor(new Color(0.55f, 0.75f, 1.00f, 1f));
         font.draw(batch, "Precisao  (P)", 110f, linhaY);
@@ -569,10 +623,14 @@ public class GameScreen implements Screen {
         font.draw(batch, String.format("%.0f%%", scoreEstabilidade), 530f, linhaY);
 
         linhaY -= 35f;
+        
+        // Exibe a porcentagem de acertos e a meta necessária
         font.setColor(new Color(1.00f, 0.75f, 0.30f, 1f));
-        font.draw(batch, "Reacao  (T)", 110f, linhaY);
+        font.draw(batch, "Acertos  (T)", 110f, linhaY);
         font.setColor(Color.WHITE);
-        font.draw(batch, String.format("%d / %d acertos", acertos, acertos + erros), 490f, linhaY);
+        
+        int meta = (dificuldade == 1) ? 75 : (dificuldade == 2) ? 50 : 30;
+        font.draw(batch, String.format("%.0f%%  (Meta: %d%%)", scoreReacao, meta), 470f, linhaY);
 
         font.getData().setScale(2.2f);
         font.setColor(new Color(0.75f, 0.45f, 1.00f, 1f));
@@ -580,10 +638,88 @@ public class GameScreen implements Screen {
         font.setColor(Color.WHITE);
         font.draw(batch, String.format("%.0f", scoreFinal), 460f, 160f);
 
+        // Texto do rodapé dinâmico dependendo se passou ou não
         font.getData().setScale(1.1f);
         font.setColor(new Color(0.55f, 0.55f, 0.70f, 1f));
-        font.draw(batch, "ENTER: jogar novamente     ESC: menu principal", 130f, 88f);
+        String textoRodape;
+        if (passou) {
+            textoRodape = (dificuldade < 3) ? "ENTER/BOTAO: proxima fase    ESC: menu" : "ENTER/BOTAO: concluir treino    ESC: menu";
+        } else {
+            textoRodape = "ENTER/BOTAO: repetir fase    ESC: menu";
+        }
+        font.draw(batch, textoRodape, 130f, 88f);
 
+        batch.end();
+    
+    }
+
+    // =========================================================================
+    // LÓGICA E DESENHO – PAUSE
+    // =========================================================================
+    private void atualizarPause() {
+        if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN) || Gdx.input.isKeyJustPressed(Input.Keys.S))
+            opcaoPausaSelecionada = (opcaoPausaSelecionada + 1) % opcoesPausa.length;
+            
+        if (Gdx.input.isKeyJustPressed(Input.Keys.UP) || Gdx.input.isKeyJustPressed(Input.Keys.W))
+            opcaoPausaSelecionada = (opcaoPausaSelecionada - 1 + opcoesPausa.length) % opcoesPausa.length;
+
+        boolean apertouEnter = Gdx.input.isKeyJustPressed(Input.Keys.ENTER) || 
+                              (joystick != null && joystick.botaoPressionado && !botaoAnterior);
+                              
+        if (joystick != null) botaoAnterior = joystick.botaoPressionado;
+
+        if (apertouEnter) {
+            if (joystick != null) joystick.botaoPressionado = false;
+            
+            switch (opcaoPausaSelecionada) {
+                case 0: // CONTINUAR
+                    estado = Estado.JOGANDO;
+                    if (musicaFundo != null) musicaFundo.play();
+                    Gdx.input.setCursorCatched(true);
+                    break;
+                case 1: // REINICIAR FASE
+                    if (musicaFundo != null) musicaFundo.stop();
+                    game.setScreen(new GameScreen(game, dificuldade));
+                    break;
+                case 2: // VOLTAR AO MENU
+                    if (musicaFundo != null) musicaFundo.stop();
+                    game.setScreen(new MenuScreen(game));
+                    break;
+            }
+        }
+    }
+
+    private void desenharPause() {
+        // Fundo escurecido semi-transparente
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        shape.begin(ShapeRenderer.ShapeType.Filled);
+        shape.setColor(new Color(0, 0, 0, 0.75f));
+        shape.rect(0, 0, LARGURA, ALTURA);
+        
+        // Caixa do menu
+        shape.setColor(new Color(0.1f, 0.05f, 0.2f, 0.9f));
+        shape.rect(LARGURA / 2 - 150, ALTURA / 2 - 100, 300, 200);
+        shape.setColor(new Color(0.55f, 0.20f, 0.90f, 1f));
+        shape.rect(LARGURA / 2 - 150, ALTURA / 2 - 100, 4, 200);
+        shape.end();
+        Gdx.gl.glDisable(GL20.GL_BLEND);
+
+        batch.begin();
+        font.getData().setScale(2f);
+        font.setColor(Color.CYAN);
+        font.draw(batch, "SISTEMA PAUSADO", 0, ALTURA / 2 + 70, LARGURA, Align.center, false);
+        
+        font.getData().setScale(1.2f);
+        for (int i = 0; i < opcoesPausa.length; i++) {
+            if (i == opcaoPausaSelecionada) {
+                font.setColor(Color.YELLOW);
+                font.draw(batch, "> " + opcoesPausa[i], LARGURA / 2 - 80, ALTURA / 2 + 10 - (i * 40));
+            } else {
+                font.setColor(Color.WHITE);
+                font.draw(batch, opcoesPausa[i], LARGURA / 2 - 60, ALTURA / 2 + 10 - (i * 40));
+            }
+        }
         batch.end();
     }
 
@@ -594,6 +730,7 @@ public class GameScreen implements Screen {
     public void hide() {
         Gdx.input.setCursorCatched(false);
         if (joystick != null) joystick.fechar();
+        if (musicaFundo != null) musicaFundo.stop(); // Para a música ao sair da tela
     }
 
     private void desenharCard(float x, float y, float largura, float altura, Color corFundo, Color corAcento) {
@@ -621,5 +758,6 @@ public class GameScreen implements Screen {
         shape.dispose();
         font.dispose();
         if (joystick != null) joystick.fechar();
+        if (musicaFundo != null) musicaFundo.dispose(); // Limpa a memória
     }
 }

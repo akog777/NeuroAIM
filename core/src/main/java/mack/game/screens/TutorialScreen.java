@@ -58,7 +58,7 @@ public class TutorialScreen implements Screen {
         font.setColor(Color.DARK_GRAY);
         font.getData().setScale(1.3f);
         font.draw(batch, "1. Identifique o alvo neural na tela.",              120, 340);
-        font.draw(batch, "2. Ajuste a mira usando o potenciômetro.",           120, 300);
+        font.draw(batch, "2. Ajuste a mira usando o joystick.",                120, 300);
         font.draw(batch, "3. Pressione ESPAÇO para disparar.",                 120, 260);
         font.draw(batch, "4. O jogo avalia precisão, estabilidade e reação.",  120, 220);
 
