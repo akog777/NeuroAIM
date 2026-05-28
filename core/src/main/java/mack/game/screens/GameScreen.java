@@ -19,7 +19,7 @@ import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Align;
-import com.badlogic.gdx.utils.viewport.StretchViewport;
+import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 
 public class GameScreen implements Screen {
@@ -39,7 +39,6 @@ public class GameScreen implements Screen {
     private enum Estado { JOGANDO, GAME_OVER, PAUSADO }
     private Estado estado = Estado.JOGANDO;
 
-    // --- VARIÁVEIS DO MENU DE PAUSA ---
     private String[] opcoesPausa = { "CONTINUAR", "REINICIAR FASE", "VOLTAR AO MENU" };
     private int opcaoPausaSelecionada = 0;
 
@@ -54,9 +53,6 @@ public class GameScreen implements Screen {
     private static final float VELOCIDADE_MIRA = 220f;
     private static final float RAIO_MIRA       = 8f; 
     private static final float MARGEM_TOPO     = 60f;
-
-    private float mouseXAnterior = -1;
-    private float mouseYAnterior = -1;
 
     private float miraAngulo = 0f;
     private float miraPulso  = 0f;
@@ -89,12 +85,19 @@ public class GameScreen implements Screen {
 
     private int dificuldade = 1;
 
-    // =========================================================================
-    // INNER CLASS
-    // =========================================================================
+    // --- CORREÇÃO 1: Variável reaproveitável de cor para evitar Memory Leaks ---
+    private final Color tempColor = new Color();
+    
+    // Cores estáticas reaproveitáveis (Evita milhares de criações por segundo)
+    private static final Color COR_MIRA_ON       = new Color(0.15f, 0.95f, 0.45f, 1f);
+    private static final Color COR_MIRA_OFF      = new Color(0.85f, 0.85f, 1.00f, 1f);
+    private static final Color COR_MIRA_HALO_ON  = new Color(0.15f, 0.95f, 0.45f, 0.12f);
+    private static final Color COR_MIRA_HALO_OFF = new Color(0.55f, 0.20f, 0.90f, 0.10f);
+    private static final Color COR_ESTAB_BOA     = new Color(0.20f, 0.85f, 0.45f, 0.7f);
+    private static final Color COR_ESTAB_RUIM    = new Color(0.90f, 0.25f, 0.25f, 0.7f);
+
     private static class Alvo {
         float x, y, raio, vida, vidaTotal, velX, velY, tempoAparecer;
-
         Alvo(float x, float y, float raio, float vida, float velX, float velY, float agora) {
             this.x = x; this.y = y; this.raio = raio;
             this.vida = vida; this.vidaTotal = vida;
@@ -103,9 +106,6 @@ public class GameScreen implements Screen {
         }
     }
 
-    // =========================================================================
-    // CONSTRUTOR
-    // =========================================================================
     public GameScreen(Game game) { this(game, 1); }
 
     public GameScreen(Game game, int dificuldade) {
@@ -113,13 +113,11 @@ public class GameScreen implements Screen {
         this.dificuldade = dificuldade;
     }
 
-    // =========================================================================
-    // CICLO DE VIDA
-    // =========================================================================
     @Override
     public void show() {
         camera   = new OrthographicCamera();
-        viewport = new StretchViewport(LARGURA, ALTURA, camera);
+        // CORREÇÃO 4: FitViewport 
+        viewport = new FitViewport(LARGURA, ALTURA, camera);
         viewport.apply();
         camera.position.set(LARGURA / 2f, ALTURA / 2f, 0);
 
@@ -130,21 +128,19 @@ public class GameScreen implements Screen {
         miraX = LARGURA / 2f;
         miraY = MARGEM_HUD + (ALTURA - MARGEM_HUD) / 2f;
 
-            
         String bgPath = "fase" + dificuldade + ".jpeg";
         background = new Texture(Gdx.files.internal(bgPath));
 
-        // --- CARREGAR MÚSICA DA FASE DINAMICAMENTE ---
         String musicPath = "fase" + dificuldade + "m.mp3";
         musicaFundo = Gdx.audio.newMusic(Gdx.files.internal(musicPath));
-        musicaFundo.setLooping(true); // Repete a música se ela acabar antes do tempo
-        musicaFundo.setVolume(0.3f);  // Volume entre 0.0f (mudo) e 1.0f (estourando)
+        musicaFundo.setLooping(true);
+        musicaFundo.setVolume(0.3f);
         musicaFundo.play();
 
         Gdx.input.setCursorCatched(true);
         ajustarDificuldade();
         
-        joystick = new mack.game.JoystickInput("COM4");
+        joystick = new mack.game.JoystickInput(ConfigScreen.portaCOM);
         joystickThread = new Thread(joystick);
         joystickThread.setDaemon(true);
         joystickThread.start();
@@ -158,24 +154,20 @@ public class GameScreen implements Screen {
         }
     }
 
-    // =========================================================================
-    // RENDER
-    // =========================================================================
     @Override
     public void render(float delta) {
         camera.update();
         batch.setProjectionMatrix(camera.combined);
         shape.setProjectionMatrix(camera.combined);
 
-        // --- SISTEMA DE PAUSA ---
         if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
             if (estado == Estado.JOGANDO) {
                 estado = Estado.PAUSADO;
-                if (musicaFundo != null) musicaFundo.pause(); // Pausa a música
+                if (musicaFundo != null) musicaFundo.pause();
             } else if (estado == Estado.PAUSADO) {
                 estado = Estado.JOGANDO;
-                if (musicaFundo != null) musicaFundo.play();  // Despausa a música
-                Gdx.input.setCursorCatched(true); // Prende o mouse de novo
+                if (musicaFundo != null) musicaFundo.play();
+                Gdx.input.setCursorCatched(true);
             }
         }
 
@@ -190,7 +182,7 @@ public class GameScreen implements Screen {
             desenharJogo();
         } else if (estado == Estado.PAUSADO) {
             Gdx.input.setCursorCatched(false);
-            desenharJogo(); // Desenha o jogo congelado no fundo
+            desenharJogo(); 
             atualizarPause();
             desenharPause();
         } else {
@@ -201,19 +193,16 @@ public class GameScreen implements Screen {
                                          (joystick != null && joystick.botaoPressionado);
 
             if (apertouParaAvancar) {
-                if (joystick != null) joystick.botaoPressionado = false; // Reseta o clique
+                if (joystick != null) joystick.botaoPressionado = false;
 
-                // --- LÓGICA DE META DE ACERTOS ---
                 boolean passou = false;
                 if (dificuldade == 1 && scoreReacao >= 75f) passou = true;
                 else if (dificuldade == 2 && scoreReacao >= 50f) passou = true;
                 else if (dificuldade == 3 && scoreReacao >= 30f) passou = true;
 
                 if (passou) {
-                    // Bateu a meta! Mostra a história e avança
                     game.setScreen(new StoryScreen(game, dificuldade));
                 } else {
-                    // Falhou na meta. Repete a mesma fase
                     game.setScreen(new GameScreen(game, dificuldade));
                 }
             }
@@ -240,9 +229,6 @@ public class GameScreen implements Screen {
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
     }
 
-    // =========================================================================
-    // LÓGICA
-    // =========================================================================
     private void atualizar(float delta) {
         tempoRestante -= delta;
         if (tempoRestante <= 0) {
@@ -298,8 +284,7 @@ public class GameScreen implements Screen {
             }
         }
 
-        if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE) ||
-            Gdx.input.isButtonJustPressed(Input.Buttons.LEFT)) {
+        if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE) || Gdx.input.isButtonJustPressed(Input.Buttons.LEFT)) {
             disparar();
         }
     }
@@ -308,28 +293,19 @@ public class GameScreen implements Screen {
         float dx = 0, dy = 0;
 
         if (joystick != null) {
-            
-            // --- EIXO X DO JOGO (ESQUERDA / DIREITA) ---
             if (joystick.y < 1000) dx -= 1;      
             else if (joystick.y > 3000) dx += 1; 
 
-            // --- EIXO Y DO JOGO (BAIXO / CIMA) ---
             if (joystick.x < 1000) dy -= 1;      
             else if (joystick.x > 3000) dy += 1; 
 
-            // --- LÓGICA DO BOTÃO (1 CLIQUE POR APERTO) ---
             boolean botaoAtual = joystick.botaoPressionado;
-            
-            // Só dispara se estiver pressionado AGORA e NÃO ESTAVA no frame passado
             if (botaoAtual && !botaoAnterior) {
                 disparar();
             }
-            
-            // Guarda o estado atual para comparar no próximo frame
             botaoAnterior = botaoAtual;
         }
 
-        // Teclado (Mantido para testes)
         if (Gdx.input.isKeyPressed(Input.Keys.LEFT)  || Gdx.input.isKeyPressed(Input.Keys.A)) dx -= 1;
         if (Gdx.input.isKeyPressed(Input.Keys.RIGHT) || Gdx.input.isKeyPressed(Input.Keys.D)) dx += 1;
         if (Gdx.input.isKeyPressed(Input.Keys.UP)    || Gdx.input.isKeyPressed(Input.Keys.W)) dy += 1;
@@ -355,10 +331,8 @@ public class GameScreen implements Screen {
         float vida   = getVidaAlvo();
 
         float velX = 0, velY = 0;
-        if (dificuldade >= 2)
-            velX = MathUtils.random(40f, 90f) * (MathUtils.randomBoolean() ? 1 : -1);
-        if (dificuldade == 3)
-            velY = MathUtils.random(30f, 70f) * (MathUtils.randomBoolean() ? 1 : -1);
+        if (dificuldade >= 2) velX = MathUtils.random(40f, 90f) * (MathUtils.randomBoolean() ? 1 : -1);
+        if (dificuldade == 3) velY = MathUtils.random(30f, 70f) * (MathUtils.randomBoolean() ? 1 : -1);
 
         float agora = DURACAO_SESSAO - tempoRestante;
         alvos.add(new Alvo(x, y, raio, vida, velX, velY, agora));
@@ -385,7 +359,8 @@ public class GameScreen implements Screen {
         Alvo  melhorAlvo      = null;
 
         for (Alvo a : alvos) {
-            float dist = new Vector2(miraX - a.x, miraY - a.y).len();
+            // CORREÇÃO 1: Vector2.dst evita a criação do objeto Vector2 a cada click
+            float dist = Vector2.dst(miraX, miraY, a.x, a.y);
             if (dist < melhorDistancia) { melhorDistancia = dist; melhorAlvo = a; }
         }
 
@@ -419,73 +394,70 @@ public class GameScreen implements Screen {
         scoreReacao       = taxaAcerto * 100f;
     }
 
-    // =========================================================================
-    // DESENHO – JOGO
-    // =========================================================================
     private void desenharJogo() {
         shape.begin(ShapeRenderer.ShapeType.Filled);
 
-        shape.setColor(new Color(0.10f, 0.05f, 0.22f, 1f));
+        // CORREÇÃO 1: Evitando 'new Color' - ShapeRenderer tem o setColor (r,g,b,a) nativo!
+        shape.setColor(0.10f, 0.05f, 0.22f, 1f);
         shape.rect(0, ALTURA - MARGEM_HUD, LARGURA, MARGEM_HUD);
-        shape.setColor(new Color(0.55f, 0.20f, 0.90f, 1f));
+        shape.setColor(0.55f, 0.20f, 0.90f, 1f);
         shape.rect(0, ALTURA - MARGEM_HUD, LARGURA, 2f);
 
-        desenharCard(10, ALTURA - MARGEM_HUD + 8f, 130f, 44f,
-                new Color(0.18f, 0.09f, 0.38f, 1f), new Color(0.55f, 0.20f, 0.90f, 1f));
-        desenharCard(LARGURA - 265f, ALTURA - MARGEM_HUD + 8f, 120f, 44f,
-                new Color(0.05f, 0.20f, 0.12f, 1f), new Color(0.15f, 0.75f, 0.40f, 1f));
-        desenharCard(LARGURA - 135f, ALTURA - MARGEM_HUD + 8f, 80f, 44f,
-                new Color(0.22f, 0.05f, 0.05f, 1f), new Color(0.85f, 0.20f, 0.20f, 1f));
+        desenharCard(10, ALTURA - MARGEM_HUD + 8f, 130f, 44f, 0.18f, 0.09f, 0.38f, 1f, 0.55f, 0.20f, 0.90f, 1f);
+        desenharCard(LARGURA - 265f, ALTURA - MARGEM_HUD + 8f, 120f, 44f, 0.05f, 0.20f, 0.12f, 1f, 0.15f, 0.75f, 0.40f, 1f);
+        desenharCard(LARGURA - 135f, ALTURA - MARGEM_HUD + 8f, 80f, 44f, 0.22f, 0.05f, 0.05f, 1f, 0.85f, 0.20f, 0.20f, 1f);
 
         for (Alvo a : alvos) {
             float propVida = a.vida / a.vidaTotal;
             float urgencia = 1f - propVida;
 
-            shape.setColor(new Color(0.40f + 0.35f * urgencia, 0.05f, 0.75f - 0.45f * urgencia, 0.12f + 0.08f * propVida));
+            shape.setColor(0.40f + 0.35f * urgencia, 0.05f, 0.75f - 0.45f * urgencia, 0.12f + 0.08f * propVida);
             shape.circle(a.x, a.y, a.raio + 12f + MathUtils.sin(miraPulso * 4f + a.x) * 3f);
 
-            shape.setColor(new Color(0.60f + 0.30f * urgencia, 0.10f, 0.85f - 0.50f * urgencia, 0.30f));
+            shape.setColor(0.60f + 0.30f * urgencia, 0.10f, 0.85f - 0.50f * urgencia, 0.30f);
             shape.circle(a.x, a.y, a.raio + 5f);
 
-            shape.setColor(new Color(0.28f + 0.42f * urgencia, 0.06f, 0.72f - 0.42f * urgencia, 0.92f));
+            shape.setColor(0.28f + 0.42f * urgencia, 0.06f, 0.72f - 0.42f * urgencia, 0.92f);
             shape.circle(a.x, a.y, a.raio);
 
-            shape.setColor(new Color(1f, 1f, 1f, 0.12f));
+            shape.setColor(1f, 1f, 1f, 0.12f);
             shape.circle(a.x, a.y, a.raio * 0.72f);
-            shape.setColor(new Color(1f, 1f, 1f, 0.85f));
+            shape.setColor(1f, 1f, 1f, 0.85f);
             shape.circle(a.x, a.y, a.raio * 0.18f);
 
             float bvX = a.x - a.raio, bvY = a.y - a.raio - 8f, bvLarg = a.raio * 2f;
-            shape.setColor(new Color(0.15f, 0.05f, 0.25f, 0.7f));
+            shape.setColor(0.15f, 0.05f, 0.25f, 0.7f);
             shape.rect(bvX, bvY, bvLarg, 4f);
-            shape.setColor(new Color(0.15f + 0.7f * urgencia, 0.75f - 0.65f * urgencia, 0.20f, 0.9f));
+            shape.setColor(0.15f + 0.7f * urgencia, 0.75f - 0.65f * urgencia, 0.20f, 0.9f);
             shape.rect(bvX, bvY, bvLarg * propVida, 4f);
         }
 
         boolean sobreAlvo = false;
         for (Alvo a : alvos) {
-            if (new Vector2(miraX - a.x, miraY - a.y).len() <= a.raio + RAIO_MIRA) { sobreAlvo = true; break; }
+            // CORREÇÃO 1: Usando Vector2.dst em vez de Vector2 object creation
+            if (Vector2.dst(miraX, miraY, a.x, a.y) <= a.raio + RAIO_MIRA) { sobreAlvo = true; break; }
         }
-        Color corMira     = sobreAlvo ? new Color(0.15f, 0.95f, 0.45f, 1f)    : new Color(0.85f, 0.85f, 1.00f, 1f);
-        Color corMiraHalo = sobreAlvo ? new Color(0.15f, 0.95f, 0.45f, 0.12f) : new Color(0.55f, 0.20f, 0.90f, 0.10f);
+        
+        Color corMira     = sobreAlvo ? COR_MIRA_ON : COR_MIRA_OFF;
+        Color corMiraHalo = sobreAlvo ? COR_MIRA_HALO_ON : COR_MIRA_HALO_OFF;
+        
         float pulsoRaio   = RAIO_MIRA + 11f + MathUtils.sin(miraPulso * 3.2f) * 2f;
         float escR        = miraEscala;
 
         shape.setColor(corMiraHalo);
         shape.circle(miraX, miraY, (pulsoRaio + 14f) * escR);
-
         shape.end();
 
         shape.begin(ShapeRenderer.ShapeType.Line);
 
-        shape.setColor(new Color(0.55f, 0.20f, 0.90f, 0.4f));
+        shape.setColor(0.55f, 0.20f, 0.90f, 0.4f);
         shape.rect(10, ALTURA - MARGEM_HUD + 8f, 130f, 44f);
-        shape.setColor(new Color(0.15f, 0.75f, 0.40f, 0.5f));
+        shape.setColor(0.15f, 0.75f, 0.40f, 0.5f);
         shape.rect(LARGURA - 265f, ALTURA - MARGEM_HUD + 8f, 120f, 44f);
-        shape.setColor(new Color(0.85f, 0.20f, 0.20f, 0.5f));
+        shape.setColor(0.85f, 0.20f, 0.20f, 0.5f);
         shape.rect(LARGURA - 135f, ALTURA - MARGEM_HUD + 8f, 80f, 44f);
 
-        shape.setColor(new Color(0.30f, 0.10f, 0.50f, 0.4f));
+        shape.setColor(0.30f, 0.10f, 0.50f, 0.4f);
         shape.line(10f, ALTURA - MARGEM_HUD + 5f, LARGURA - 10f, ALTURA - MARGEM_HUD + 5f);
 
         shape.setColor(corMira);
@@ -510,9 +482,7 @@ public class GameScreen implements Screen {
             float ang = MathUtils.degreesToRadians * (45f + q * 90f);
             float cx  = miraX + MathUtils.cos(ang) * diagR;
             float cy  = miraY + MathUtils.sin(ang) * diagR;
-            shape.line(cx, cy,
-                    miraX + MathUtils.cos(ang) * (diagR + diagLen),
-                    miraY + MathUtils.sin(ang) * (diagR + diagLen));
+            shape.line(cx, cy, miraX + MathUtils.cos(ang) * (diagR + diagLen), miraY + MathUtils.sin(ang) * (diagR + diagLen));
         }
 
         shape.end();
@@ -521,10 +491,7 @@ public class GameScreen implements Screen {
         shape.setColor(corMira);
         shape.circle(miraX, miraY, 3.5f * escR);
 
-        Color corEstab = estabilidadeMedia > 0.6f
-                ? new Color(0.20f, 0.85f, 0.45f, 0.7f)
-                : new Color(0.90f, 0.25f, 0.25f, 0.7f);
-        shape.setColor(corEstab);
+        shape.setColor(estabilidadeMedia > 0.6f ? COR_ESTAB_BOA : COR_ESTAB_RUIM);
         shape.rect(0, ALTURA - MARGEM_HUD, LARGURA * estabilidadeMedia, 3f);
         shape.end();
 
@@ -533,67 +500,68 @@ public class GameScreen implements Screen {
         int     seg           = (int) tempoRestante;
         boolean urgenciaTimer = tempoRestante < 10f;
         font.getData().setScale(1.3f);
-        font.setColor(urgenciaTimer ? new Color(1f, 0.35f, 0.35f, 1f) : new Color(0.85f, 0.70f, 1.00f, 1f));
+        
+        // CORREÇÃO 1: Reaproveitando tempColor sem alocar nova memória
+        font.setColor(urgenciaTimer ? tempColor.set(1f, 0.35f, 0.35f, 1f) : tempColor.set(0.85f, 0.70f, 1.00f, 1f));
         font.draw(batch, "TEMPO", 20, ALTURA - MARGEM_HUD + 48f);
+        
         font.getData().setScale(1.8f);
-        font.setColor(urgenciaTimer ? new Color(1f, 0.25f, 0.25f, 1f) : Color.WHITE);
+        font.setColor(urgenciaTimer ? tempColor.set(1f, 0.25f, 0.25f, 1f) : Color.WHITE);
         font.draw(batch, String.format("%02d:%02d", seg / 60, seg % 60), 20, ALTURA - MARGEM_HUD + 32f);
 
         font.getData().setScale(1.1f);
-        font.setColor(new Color(0.50f, 1.00f, 0.65f, 1f));
+        font.setColor(tempColor.set(0.50f, 1.00f, 0.65f, 1f));
         font.draw(batch, "ACERTOS", LARGURA - 260f, ALTURA - MARGEM_HUD + 48f);
+        
         font.getData().setScale(1.8f);
-        font.setColor(new Color(0.30f, 1.00f, 0.55f, 1f));
+        font.setColor(tempColor.set(0.30f, 1.00f, 0.55f, 1f));
         font.draw(batch, String.valueOf(acertos), LARGURA - 210f, ALTURA - MARGEM_HUD + 32f);
 
         font.getData().setScale(1.1f);
-        font.setColor(new Color(1.00f, 0.50f, 0.50f, 1f));
+        font.setColor(tempColor.set(1.00f, 0.50f, 0.50f, 1f));
         font.draw(batch, "ERROS", LARGURA - 130f, ALTURA - MARGEM_HUD + 48f);
+        
         font.getData().setScale(1.8f);
-        font.setColor(new Color(1f, 0.30f, 0.30f, 1f));
+        font.setColor(tempColor.set(1f, 0.30f, 0.30f, 1f));
         font.draw(batch, String.valueOf(erros), LARGURA - 107f, ALTURA - MARGEM_HUD + 32f);
 
         font.getData().setScale(0.9f);
-        font.setColor(new Color(0.60f, 0.60f, 0.75f, 1f));
+        font.setColor(tempColor.set(0.60f, 0.60f, 0.75f, 1f));
         String labelEstab = estabilidadeMedia > 0.6f ? "ESTAVEL" : "INSTAVEL";
         font.draw(batch, "ESTAB: " + labelEstab + "  (" + (int)(estabilidadeMedia * 100) + "%)", 10, ALTURA - MARGEM_HUD - 4f);
 
         font.getData().setScale(0.85f);
-        font.setColor(new Color(0.45f, 0.45f, 0.60f, 1f));
+        font.setColor(tempColor.set(0.45f, 0.45f, 0.60f, 1f));
         font.draw(batch, "Controle Analogico  -  BOTAO para disparar  -  ESC: menu", 10, 14f);
 
         batch.end();
     }
 
-    // =========================================================================
-    // DESENHO – GAME OVER
-    // =========================================================================
     private void desenharGameOver() {
         shape.begin(ShapeRenderer.ShapeType.Filled);
-        shape.setColor(new Color(0.08f, 0.04f, 0.18f, 1f));
+        shape.setColor(0.08f, 0.04f, 0.18f, 1f);
         shape.rect(80, 60, LARGURA - 160f, ALTURA - 120f);
-        shape.setColor(new Color(0.55f, 0.20f, 0.90f, 1f));
+        shape.setColor(0.55f, 0.20f, 0.90f, 1f);
         shape.rect(80, 60, 4f, ALTURA - 120f);
-        shape.setColor(new Color(0.14f, 0.07f, 0.28f, 1f));
+        shape.setColor(0.14f, 0.07f, 0.28f, 1f);
         shape.rect(84, ALTURA - 130f, LARGURA - 164f, 50f);
-        shape.setColor(new Color(0.55f, 0.20f, 0.90f, 0.25f));
+        shape.setColor(0.55f, 0.20f, 0.90f, 0.25f);
         shape.rect(100, 175f, LARGURA - 200f, 2f);
-        shape.setColor(new Color(0.20f, 0.09f, 0.40f, 0.6f));
+        shape.setColor(0.20f, 0.09f, 0.40f, 0.6f);
         shape.rect(100, 120f, LARGURA - 200f, 50f);
-        shape.setColor(new Color(0.55f, 0.20f, 0.90f, 0.4f));
+        shape.setColor(0.55f, 0.20f, 0.90f, 0.4f);
         shape.rect(100, 120f, 4f, 50f);
         shape.end();
 
         shape.begin(ShapeRenderer.ShapeType.Line);
-        shape.setColor(new Color(0.55f, 0.20f, 0.90f, 0.5f));
+        shape.setColor(0.55f, 0.20f, 0.90f, 0.5f);
         shape.rect(80, 60, LARGURA - 160f, ALTURA - 120f);
-        shape.setColor(new Color(0.55f, 0.20f, 0.90f, 0.35f));
+        shape.setColor(0.55f, 0.20f, 0.90f, 0.35f);
         shape.rect(100, 120f, LARGURA - 200f, 50f);
         shape.end();
 
         batch.begin();
 
-        // Verifica se o jogador bateu a meta para mudar os textos
         boolean passou = false;
         if (dificuldade == 1 && scoreReacao >= 75f) passou = true;
         else if (dificuldade == 2 && scoreReacao >= 50f) passou = true;
@@ -601,31 +569,28 @@ public class GameScreen implements Screen {
 
         font.getData().setScale(2.6f);
         if (passou) {
-            font.setColor(new Color(0.20f, 0.85f, 0.45f, 1f)); // Verde
+            font.setColor(tempColor.set(0.20f, 0.85f, 0.45f, 1f)); 
             font.draw(batch, "FASE " + dificuldade + " CONCLUIDA!", 105, ALTURA - 90f);
         } else {
-            font.setColor(new Color(0.90f, 0.25f, 0.25f, 1f)); // Vermelho
+            font.setColor(tempColor.set(0.90f, 0.25f, 0.25f, 1f)); 
             font.draw(batch, "TREINO FALHOU. TENTE NOVAMENTE.", 85, ALTURA - 90f);
         }
 
-        // Subimos um pouco os textos porque a fórmula foi removida
         float linhaY = ALTURA - 150f; 
         font.getData().setScale(1.3f);
-        font.setColor(new Color(0.55f, 0.75f, 1.00f, 1f));
+        font.setColor(tempColor.set(0.55f, 0.75f, 1.00f, 1f));
         font.draw(batch, "Precisao  (P)", 110f, linhaY);
         font.setColor(Color.WHITE);
         font.draw(batch, String.format("%.0f%%", scorePrecisao), 530f, linhaY);
 
         linhaY -= 35f;
-        font.setColor(new Color(0.30f, 1.00f, 0.60f, 1f));
+        font.setColor(tempColor.set(0.30f, 1.00f, 0.60f, 1f));
         font.draw(batch, "Estabilidade  (E)", 110f, linhaY);
         font.setColor(Color.WHITE);
         font.draw(batch, String.format("%.0f%%", scoreEstabilidade), 530f, linhaY);
 
         linhaY -= 35f;
-        
-        // Exibe a porcentagem de acertos e a meta necessária
-        font.setColor(new Color(1.00f, 0.75f, 0.30f, 1f));
+        font.setColor(tempColor.set(1.00f, 0.75f, 0.30f, 1f));
         font.draw(batch, "Acertos  (T)", 110f, linhaY);
         font.setColor(Color.WHITE);
         
@@ -633,14 +598,13 @@ public class GameScreen implements Screen {
         font.draw(batch, String.format("%.0f%%  (Meta: %d%%)", scoreReacao, meta), 470f, linhaY);
 
         font.getData().setScale(2.2f);
-        font.setColor(new Color(0.75f, 0.45f, 1.00f, 1f));
+        font.setColor(tempColor.set(0.75f, 0.45f, 1.00f, 1f));
         font.draw(batch, "SCORE FINAL", 115, 160f);
         font.setColor(Color.WHITE);
         font.draw(batch, String.format("%.0f", scoreFinal), 460f, 160f);
 
-        // Texto do rodapé dinâmico dependendo se passou ou não
         font.getData().setScale(1.1f);
-        font.setColor(new Color(0.55f, 0.55f, 0.70f, 1f));
+        font.setColor(tempColor.set(0.55f, 0.55f, 0.70f, 1f));
         String textoRodape;
         if (passou) {
             textoRodape = (dificuldade < 3) ? "ENTER/BOTAO: proxima fase    ESC: menu" : "ENTER/BOTAO: concluir treino    ESC: menu";
@@ -650,12 +614,8 @@ public class GameScreen implements Screen {
         font.draw(batch, textoRodape, 130f, 88f);
 
         batch.end();
-    
     }
 
-    // =========================================================================
-    // LÓGICA E DESENHO – PAUSE
-    // =========================================================================
     private void atualizarPause() {
         if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN) || Gdx.input.isKeyJustPressed(Input.Keys.S))
             opcaoPausaSelecionada = (opcaoPausaSelecionada + 1) % opcoesPausa.length;
@@ -672,16 +632,16 @@ public class GameScreen implements Screen {
             if (joystick != null) joystick.botaoPressionado = false;
             
             switch (opcaoPausaSelecionada) {
-                case 0: // CONTINUAR
+                case 0:
                     estado = Estado.JOGANDO;
                     if (musicaFundo != null) musicaFundo.play();
                     Gdx.input.setCursorCatched(true);
                     break;
-                case 1: // REINICIAR FASE
+                case 1:
                     if (musicaFundo != null) musicaFundo.stop();
                     game.setScreen(new GameScreen(game, dificuldade));
                     break;
-                case 2: // VOLTAR AO MENU
+                case 2:
                     if (musicaFundo != null) musicaFundo.stop();
                     game.setScreen(new MenuScreen(game));
                     break;
@@ -690,17 +650,15 @@ public class GameScreen implements Screen {
     }
 
     private void desenharPause() {
-        // Fundo escurecido semi-transparente
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         shape.begin(ShapeRenderer.ShapeType.Filled);
-        shape.setColor(new Color(0, 0, 0, 0.75f));
+        shape.setColor(0, 0, 0, 0.75f);
         shape.rect(0, 0, LARGURA, ALTURA);
         
-        // Caixa do menu
-        shape.setColor(new Color(0.1f, 0.05f, 0.2f, 0.9f));
+        shape.setColor(0.1f, 0.05f, 0.2f, 0.9f);
         shape.rect(LARGURA / 2 - 150, ALTURA / 2 - 100, 300, 200);
-        shape.setColor(new Color(0.55f, 0.20f, 0.90f, 1f));
+        shape.setColor(0.55f, 0.20f, 0.90f, 1f);
         shape.rect(LARGURA / 2 - 150, ALTURA / 2 - 100, 4, 200);
         shape.end();
         Gdx.gl.glDisable(GL20.GL_BLEND);
@@ -730,13 +688,14 @@ public class GameScreen implements Screen {
     public void hide() {
         Gdx.input.setCursorCatched(false);
         if (joystick != null) joystick.fechar();
-        if (musicaFundo != null) musicaFundo.stop(); // Para a música ao sair da tela
+        if (musicaFundo != null) musicaFundo.stop();
     }
 
-    private void desenharCard(float x, float y, float largura, float altura, Color corFundo, Color corAcento) {
-        shape.setColor(corFundo);
+    // CORREÇÃO 1: Alterámos a assinatura para receber as cores float e não instanciar os objetos Color
+    private void desenharCard(float x, float y, float largura, float altura, float r1, float g1, float b1, float a1, float r2, float g2, float b2, float a2) {
+        shape.setColor(r1, g1, b1, a1);
         shape.rect(x, y, largura, altura);
-        shape.setColor(corAcento);
+        shape.setColor(r2, g2, b2, a2);
         shape.rect(x, y, 3f, altura);
     }
 
@@ -758,6 +717,8 @@ public class GameScreen implements Screen {
         shape.dispose();
         font.dispose();
         if (joystick != null) joystick.fechar();
-        if (musicaFundo != null) musicaFundo.dispose(); // Limpa a memória
+        if (musicaFundo != null) musicaFundo.dispose(); 
+        // CORREÇÃO 2: Removendo o vazamento de memória do Texture!
+        if (background != null) background.dispose();
     }
 }

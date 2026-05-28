@@ -11,6 +11,10 @@ import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
+import com.fazecast.jSerialComm.SerialPort;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class ConfigScreen implements Screen {
 
@@ -26,8 +30,44 @@ public class ConfigScreen implements Screen {
     private boolean somLigado  = true;
     private int     dificuldade = MenuScreen.getDificuldade();
 
+    // --- VARIÁVEL GLOBAL DA PORTA COM (AGORA AUTOMÁTICA) ---
+    public static String portaCOM = autoDetectarPorta(); 
+
+    private static String autoDetectarPorta() {
+        SerialPort[] ports = SerialPort.getCommPorts();
+        if (ports.length > 0) {
+            return ports[0].getSystemPortName(); // Pega a primeira USB que encontrar conectada!
+        }
+        return "COM4"; // Padrão de segurança se nada for encontrado
+    }
+    
+    // --- LÓGICA DE DETECÇÃO DE PORTAS ---
+    private List<String> portasDisponiveis;
+    private int portaIndex = 0;
+
     public ConfigScreen(Game game) {
         this.game = game;
+        carregarPortas();
+    }
+
+    // --- BUSCA AS PORTAS CONECTADAS NO PC ---
+    private void carregarPortas() {
+        portasDisponiveis = new ArrayList<>();
+        SerialPort[] ports = SerialPort.getCommPorts();
+        
+        for (SerialPort port : ports) {
+            portasDisponiveis.add(port.getSystemPortName());
+        }
+        
+        if (portasDisponiveis.isEmpty()) {
+            portasDisponiveis.add("NENHUMA");
+        } else {
+            portaIndex = portasDisponiveis.indexOf(portaCOM);
+            if (portaIndex == -1) {
+                portaIndex = 0; 
+                portaCOM = portasDisponiveis.get(0);
+            }
+        }
     }
 
     @Override
@@ -55,18 +95,23 @@ public class ConfigScreen implements Screen {
 
         font.setColor(new Color(0.25f, 0.10f, 0.50f, 1));
         font.getData().setScale(2.5f);
-        font.draw(batch, "CONFIGURAÇÕES", 200, 410);
+        font.draw(batch, "CONFIGURACOES", 200, 410);
 
         font.getData().setScale(1.5f);
         font.setColor(Color.DARK_GRAY);
         font.draw(batch, "Som: " + (somLigado ? "Ligado" : "Desligado"), 230, 320);
         font.draw(batch, "Dificuldade: " + getNomeDificuldade(), 230, 270);
+        
+        // --- MOSTRA A PORTA SELECIONADA ---
+        font.setColor(new Color(0.2f, 0.5f, 0.8f, 1));
+        font.draw(batch, "Porta do Controle: " + portaCOM, 230, 220);
 
         font.getData().setScale(1f);
         font.setColor(Color.GRAY);
-        font.draw(batch, "Pressione ESPAÇO para ligar/desligar som", 150, 150);
+        font.draw(batch, "Pressione ESPACO para ligar/desligar som", 150, 150);
         font.draw(batch, "Pressione D para mudar dificuldade",       170, 120);
-        font.draw(batch, "Pressione ESC para voltar",                220,  90);
+        font.draw(batch, "Pressione P para trocar a porta COM",      165,  90);
+        font.draw(batch, "Pressione ESC para voltar",                220,  60);
 
         batch.end();
     }
@@ -84,6 +129,14 @@ public class ConfigScreen implements Screen {
             dificuldade = (dificuldade % 3) + 1;
             MenuScreen.setDificuldade(dificuldade);
         }
+        
+        // --- TROCA A PORTA COM AO PRESSIONAR 'P' ---
+        if (Gdx.input.isKeyJustPressed(Input.Keys.P)) {
+            if (!portasDisponiveis.isEmpty() && !portasDisponiveis.get(0).equals("NENHUMA")) {
+                portaIndex = (portaIndex + 1) % portasDisponiveis.size();
+                portaCOM = portasDisponiveis.get(portaIndex);
+            }
+        }
 
         if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE))
             game.setScreen(new MenuScreen(game));
@@ -92,8 +145,8 @@ public class ConfigScreen implements Screen {
     private String getNomeDificuldade() {
         switch (dificuldade) {
             case 1:  return "Inicial";
-            case 2:  return "Intermediário";
-            default: return "Avançado";
+            case 2:  return "Intermediario";
+            default: return "Avancado";
         }
     }
 

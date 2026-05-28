@@ -7,12 +7,11 @@ import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
+import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
-import com.badlogic.gdx.utils.viewport.FitViewport;
-import com.badlogic.gdx.utils.viewport.Viewport;
-import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.utils.viewport.StretchViewport;
+import com.badlogic.gdx.utils.viewport.Viewport;
 
 public class MenuScreen implements Screen {
 
@@ -40,11 +39,13 @@ public class MenuScreen implements Screen {
 
     @Override
     public void show() {
+        // --- CONFIGURAÇÃO DA CÂMERA (TELA ESTICADA - SEM BORDAS) ---
         camera   = new OrthographicCamera();
         viewport = new StretchViewport(V_WIDTH, V_HEIGHT, camera);
         viewport.apply();
         camera.position.set(V_WIDTH / 2f, V_HEIGHT / 2f, 0);
 
+        // --- INICIALIZAÇÃO DE RECURSOS ---
         batch = new SpriteBatch();
         font  = new BitmapFont();
         background = new Texture(Gdx.files.internal("menu.jpeg")); 
@@ -52,33 +53,32 @@ public class MenuScreen implements Screen {
 
     @Override
     public void render(float delta) {
+        // --- ATUALIZAÇÃO DA CÂMERA E ENTRADAS ---
         camera.update();
         batch.setProjectionMatrix(camera.combined);
 
         verificarEntrada();
 
+        // --- LIMPEZA DE TELA ---
         Gdx.gl.glClearColor(0.95f, 0.93f, 1f, 1);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
+        // --- RENDERIZAÇÃO DOS ELEMENTOS VISUAIS ---
         batch.begin();
-
-        // Desenha o background
+        
         batch.draw(background, 0, 0, V_WIDTH, V_HEIGHT);
 
         font.getData().setScale(2f);
         for (int i = 0; i < opcoes.length; i++) {
             if (i == opcaoSelecionada) {
-                font.setColor(Color.YELLOW); // Amarelo para destacar a opção selecionada
-                // O valor '50' alinha a seta à esquerda
+                font.setColor(Color.YELLOW); 
                 font.draw(batch, "> " + opcoes[i], 50, 300 - i * 55); 
             } else {
-                font.setColor(Color.WHITE); // Branco para as outras opções para destacar do fundo
-                // O valor '85' alinha o texto à esquerda, alinhado com o texto da seta
+                font.setColor(Color.WHITE); 
                 font.draw(batch, opcoes[i], 85, 300 - i * 55); 
             }
         }
 
-        // Texto de instruções lá embaixo, agora em branco para ficar legível
         font.setColor(Color.WHITE);
         font.getData().setScale(1f);
         font.draw(batch, "Use W/S ou Setas para navegar | ENTER para selecionar", 50, 60);
@@ -91,6 +91,7 @@ public class MenuScreen implements Screen {
         viewport.update(width, height);
     }
 
+    // --- LÓGICA DE NAVEGAÇÃO DE MENU ---
     private void verificarEntrada() {
         if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN) || Gdx.input.isKeyJustPressed(Input.Keys.S))
             opcaoSelecionada = (opcaoSelecionada + 1) % opcoes.length;
@@ -100,9 +101,9 @@ public class MenuScreen implements Screen {
             selecionarOpcao();
     }
 
+    // --- AÇÕES DO MENU ---
     private void selecionarOpcao() {
         switch (opcaoSelecionada) {
-            // Agora chamamos a história no "Capítulo 0" (Introdução)
             case 0: game.setScreen(new StoryScreen(game, 0));          break;
             case 1: game.setScreen(new ConfigScreen(game));            break;
             case 2: game.setScreen(new TutorialScreen(game));          break;
@@ -114,6 +115,7 @@ public class MenuScreen implements Screen {
     @Override public void resume() {}
     @Override public void hide()   {}
 
+    // --- LIBERAÇÃO DE MEMÓRIA (PREVENÇÃO DE VAZAMENTOS) ---
     @Override
     public void dispose() {
         batch.dispose();
